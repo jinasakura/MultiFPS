@@ -1,5 +1,4 @@
-﻿using System;
-using UnityEngine;
+﻿using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
 public class PlayerMotor : MonoBehaviour {
@@ -9,7 +8,13 @@ public class PlayerMotor : MonoBehaviour {
 
     private Vector3 velocity = Vector3.zero;
     private Vector3 rotation = Vector3.zero;
-    private Vector3 cameraRotation = Vector3.zero;
+    //修改了以下两个变量
+    private float cameraRotationX = 0f;
+    private float currentCameraRotationX = 0f;
+    private Vector3 thrusterForce = Vector3.zero;
+
+    [SerializeField]
+    private float cameraRotationLimit = 85f;
 
     private Rigidbody rb;
 
@@ -28,12 +33,17 @@ public class PlayerMotor : MonoBehaviour {
         rotation = _rotation;
     }
 
-    public void RotateCamera(Vector3 _cameraRotation)
+    public void RotateCamera(float _cameraRotationX)
     {
-        cameraRotation = _cameraRotation;
+        cameraRotationX = _cameraRotationX;
     }
 
-    //FixedUpdate方法是固定时间来执行，它不管当前游戏的运行速度等情况，它每秒会调用1/time.fixeddeltatime次。
+    public void ApplyThruster(Vector3 _thrusterForce)
+    {
+        thrusterForce = _thrusterForce;
+    }
+
+    //这里对移动和转向赋值就一定放在属于物理的FixedUpdate里
     void FixedUpdate()
     {
         PerformMovement();
@@ -44,23 +54,29 @@ public class PlayerMotor : MonoBehaviour {
     {
         if(velocity != Vector3.zero)
         {
-            //Time.fixedDeltaTime是固定值，可在Edit->Project Settings->Time下设置
-            //（当前位移+速度*时间）
-            //如果不乘以Time.fixedDeltaTime，相当于velocity*1，等于物体会移动到一秒后该去的地方，而这里明显是小于1秒的
             rb.MovePosition(rb.position + velocity * Time.fixedDeltaTime);
-            //transform.position= transform.position+ velocity* Time.fixedDeltaTime;
+        }
+
+        if (thrusterForce != Vector3.zero)
+        {
+            //注1：这里施加的是加速度，物理实在渣，稍后补详细解释
+            //注2：为什么键程会影响物体跳跃高度？
+            //答：按下时长会对物体施加一个持续的力，唉，这其实又是物理……
+            rb.AddForce(thrusterForce * Time.fixedDeltaTime, ForceMode.Acceleration);
         }
     }
 
     private void PerformRotation()
     {
-        //一定要注意下这个问题，我已经通过Constraints，锁定了旋转，为什么Player还是能动？
-        //回答见注3
         rb.MoveRotation(rb.rotation * Quaternion.Euler(rotation));
         if (cam != null)
         {
-            //这里要加负号，不然正好和鼠标方向相反
-            cam.transform.Rotate(-cameraRotation);
+            //cam.transform.Rotate(-cameraRotation);
+            currentCameraRotationX -= cameraRotationX;
+            //强力推荐这种不用if/else来判断当前数值是否在一个范围内的写法
+            currentCameraRotationX = Mathf.Clamp(currentCameraRotationX, -cameraRotationLimit, cameraRotationLimit);
+
+            cam.transform.localEulerAngles = new Vector3(currentCameraRotationX, 0f, 0f);
         }
     }
 }
